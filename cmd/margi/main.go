@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"time"
 
 	"github.com/gcaixeta/marginalia/internal/slug"
+	"github.com/gcaixeta/marginalia/internal/snippet"
 	"github.com/gcaixeta/marginalia/internal/storage"
 )
 
@@ -22,7 +24,7 @@ func newFile(collection, title string) (string, error) {
 		return "", err
 	}
 
-	filename := slug.SlugWithTime(title) + ".md"
+	filename := slug.MdSlugWithTime(title)
 	filePath := filepath.Join(collectionPath, filename)
 
 	f, err := os.OpenFile(
@@ -41,14 +43,7 @@ func newFile(collection, title string) (string, error) {
 
 	defer f.Close()
 
-	content := fmt.Sprintf(`# %s
-
-		## Created: %s
-		## Collection: %s
-
-		---
-
-		`, title, time.Now().Format(time.RFC3339), collection)
+	content := snippet.Default(title, collection)
 
 	if _, err := f.WriteString(content); err != nil {
 		return "", fmt.Errorf("Error writing %s to %s", content, filePath)
@@ -65,6 +60,27 @@ func removeFile(textGenre string) {
 	fmt.Println("remove file of type", textGenre)
 }
 
+func openInEditor(filePath string) {
+	// Create a command to run vim with the specified file
+	cmd := exec.Command("nvim", filePath)
+
+	// Attach the command's standard input, output, and error streams
+	// to the current process's standard streams. This allows the user
+	// to interact with Vim directly in the terminal.
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	fmt.Printf("Opening %s in NeoVim...\n", filePath)
+
+	// Run the command and wait for it to complete
+	if err := cmd.Run(); err != nil {
+		log.Fatalf("Error running NeoVim: %v\n", err)
+	}
+
+	fmt.Printf("Vim session for %s closed.\n", filePath)
+}
+
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage example: margi new note")
@@ -77,10 +93,11 @@ func main() {
 
 	switch action {
 	case "new":
-		_, err := newFile(textType, title)
+		filePath, err := newFile(textType, title)
 		if err != nil {
 			fmt.Println("Error creating new file:", err)
 		}
+		openInEditor(filePath)
 	case "list":
 		listFiles(textType)
 	case "remove":

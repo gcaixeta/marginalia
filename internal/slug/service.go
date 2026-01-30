@@ -33,9 +33,9 @@ func makeSlug(title string) (slug string) {
 	return s
 }
 
-func SlugWithTime(title string) string {
+func MdSlugWithTime(title string) string {
 	return fmt.Sprintf(
-		"%s-%s",
+		"%s-%s.md",
 		time.Now().Format("20060102-150405"),
 		makeSlug(title),
 	)
