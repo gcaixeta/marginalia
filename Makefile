@@ -1,9 +1,10 @@
 BINARY_NAME=margi
 CMD_PATH=./cmd/margi
+DIST_PATH=./dist
 INSTALL_PATH=$(HOME)/.local/bin
 
 build:
-	go build -o $(BINARY_NAME) $(CMD_PATH)
+	go build -o $(DIST_PATH)/$(BINARY_NAME) $(CMD_PATH)
 
 install:
 	go build -o $(INSTALL_PATH)/$(BINARY_NAME) $(CMD_PATH)
