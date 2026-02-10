@@ -10,7 +10,8 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-func makeSlug(title string) (slug string) {
+// MakeSlug converts a title to a URL-friendly slug
+func MakeSlug(title string) (slug string) {
 	s := strings.ToLower(title)
 
 	t := norm.NFD.String(s)
@@ -37,6 +38,6 @@ func MdSlugWithTime(title string) string {
 	return fmt.Sprintf(
 		"%s-%s.md",
 		time.Now().Format("20060102-150405"),
-		makeSlug(title),
+		MakeSlug(title),
 	)
 }
