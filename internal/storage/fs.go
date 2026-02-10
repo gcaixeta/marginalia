@@ -5,7 +5,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+// FileItem represents a file with its metadata
+type FileItem struct {
+	Path           string    // Full path to the file
+	Name           string    // File name
+	Collection     string    // Collection name (parent directory)
+	ModTime        time.Time // Last modification time
+	Size           int64     // File size in bytes
+}
 
 func FindFilePath(fileName string) ([]string, error) {
 	var foundFiles []string
@@ -52,4 +62,72 @@ func DataDir() (string, error) {
 	}
 
 	return base, nil
+}
+
+// ListAllFiles returns all files in all collections with their metadata
+func ListAllFiles() ([]FileItem, error) {
+	dataDir, err := DataDir()
+	if err != nil {
+		return nil, err
+	}
+
+	var files []FileItem
+
+	err = filepath.WalkDir(dataDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil // Skip entries with errors
+		}
+
+		// Only process regular files (not directories)
+		if !d.IsDir() {
+			info, err := d.Info()
+			if err != nil {
+				return nil // Skip if we can't get info
+			}
+
+			// Get the collection name (parent directory name)
+			parentDir := filepath.Dir(path)
+			collectionName := filepath.Base(parentDir)
+
+			files = append(files, FileItem{
+				Path:       path,
+				Name:       d.Name(),
+				Collection: collectionName,
+				ModTime:    info.ModTime(),
+				Size:       info.Size(),
+			})
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return files, nil
+}
+
+// FindFiles returns files matching a search term with their metadata
+func FindFiles(searchTerm string) ([]FileItem, error) {
+	allFiles, err := ListAllFiles()
+	if err != nil {
+		return nil, err
+	}
+
+	if searchTerm == "" {
+		return allFiles, nil
+	}
+
+	matchingFiles := []FileItem{}
+	searchLower := strings.ToLower(searchTerm)
+
+	for _, file := range allFiles {
+		if strings.Contains(strings.ToLower(file.Name), searchLower) ||
+			strings.Contains(strings.ToLower(file.Collection), searchLower) {
+			matchingFiles = append(matchingFiles, file)
+		}
+	}
+
+	return matchingFiles, nil
 }

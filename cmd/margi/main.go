@@ -7,9 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/gcaixeta/marginalia/internal/collection"
 	"github.com/gcaixeta/marginalia/internal/slug"
 	"github.com/gcaixeta/marginalia/internal/snippet"
 	"github.com/gcaixeta/marginalia/internal/storage"
+	"github.com/gcaixeta/marginalia/internal/ui"
 )
 
 func editFile(title string) {
@@ -97,8 +99,70 @@ func listFiles(textGenre string) {
 	fmt.Println("list files of type", textGenre)
 }
 
-func removeFile(textGenre string) {
-	fmt.Println("remove file of type", textGenre)
+func listCollections() {
+	collections, err := collection.ListCollections()
+	if err != nil {
+		fmt.Printf("Error listing collections: %v\n", err)
+		return
+	}
+
+	if len(collections) == 0 {
+		fmt.Println("Nenhuma collection encontrada.")
+		fmt.Println("Crie uma nova collection com: margi new [título]")
+		return
+	}
+
+	fmt.Println("Collections disponíveis:")
+	fmt.Println()
+	for _, c := range collections {
+		plural := ""
+		if c.FileCount != 1 {
+			plural = "s"
+		}
+		fmt.Printf("  • %s (%d nota%s)\n", c.Name, c.FileCount, plural)
+	}
+}
+
+func deleteFile(searchTerm string) {
+	// Run the visual delete picker with optional initial filter
+	selectedFile, err := ui.RunDeletePicker(searchTerm)
+	if err != nil {
+		fmt.Printf("Operação cancelada: %v\n", err)
+		return
+	}
+
+	if selectedFile == nil {
+		fmt.Println("Nenhum arquivo selecionado.")
+		return
+	}
+
+	// Show interactive confirmation dialog
+	dataDir, _ := storage.DataDir()
+	confirmed, err := ui.RunConfirmDialog(selectedFile.Path, dataDir)
+	if err != nil {
+		fmt.Printf("Erro ao mostrar diálogo de confirmação: %v\n", err)
+		return
+	}
+
+	if !confirmed {
+		fmt.Println("Exclusão cancelada.")
+		return
+	}
+
+	// Delete the file
+	err = os.Remove(selectedFile.Path)
+	if err != nil {
+		fmt.Printf("Erro ao excluir arquivo: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✓ Arquivo excluído com sucesso: %s/%s\n", selectedFile.Collection, selectedFile.Name)
+}
+
+func removeCollection(collectionName string) {
+	// TODO: Implement collection removal functionality
+	fmt.Println("Funcionalidade de remoção de collection ainda não implementada.")
+	fmt.Printf("Collection: %s\n", collectionName)
 }
 
 func openInEditor(filePath string) {
@@ -126,10 +190,13 @@ func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: margi [action] [arguments]")
 		fmt.Println("Actions:")
-		fmt.Println("  new [collection] [title]")
-		fmt.Println("  edit [search_term]")
-		fmt.Println("  list [collection]")
-		fmt.Println("  remove [collection]")
+		fmt.Println("  new [title] - criar nova nota (mostra seletor de collection)")
+		fmt.Println("  new [collection] [title] - criar nova nota em collection específica")
+		fmt.Println("  edit [search_term] - editar nota existente")
+		fmt.Println("  rm [search_term] - excluir nota existente (interface visual com confirmação)")
+		fmt.Println("  collections - listar todas as collections")
+		fmt.Println("  list [collection] - listar arquivos de uma collection")
+		fmt.Println("  remove [collection] - remover collection")
 		return
 	}
 
@@ -137,13 +204,27 @@ func main() {
 
 	switch action {
 	case "new":
-		if len(os.Args) < 4 {
-			fmt.Println("Usage: margi new [collection] [title]")
+		var collectionName, title string
+		
+		if len(os.Args) == 3 {
+			// Only title provided, show collection picker
+			title = os.Args[2]
+			selectedCollection, err := ui.RunPicker()
+			if err != nil {
+				fmt.Printf("Operação cancelada: %v\n", err)
+				return
+			}
+			collectionName = selectedCollection
+		} else if len(os.Args) >= 4 {
+			// Collection and title provided
+			collectionName = os.Args[2]
+			title = os.Args[3]
+		} else {
+			fmt.Println("Usage: margi new [title] ou margi new [collection] [title]")
 			return
 		}
-		textType := os.Args[2]
-		title := os.Args[3]
-		filePath, err := newFile(textType, title)
+		
+		filePath, err := newFile(collectionName, title)
 		if err != nil {
 			fmt.Println("Error creating new file:", err)
 			return
@@ -156,6 +237,13 @@ func main() {
 		}
 		title := os.Args[2]
 		editFile(title)
+	case "rm":
+		// Search term is optional - if not provided, show all files
+		searchTerm := ""
+		if len(os.Args) >= 3 {
+			searchTerm = os.Args[2]
+		}
+		deleteFile(searchTerm)
 	case "list":
 		if len(os.Args) < 3 {
 			fmt.Println("Usage: margi list [collection]")
@@ -168,8 +256,10 @@ func main() {
 			fmt.Println("Usage: margi remove [collection]")
 			return
 		}
-		textType := os.Args[2]
-		removeFile(textType)
+		collectionName := os.Args[2]
+		removeCollection(collectionName)
+	case "collections":
+		listCollections()
 	default:
 		fmt.Printf("Unknown action: %s\n", action)
 	}
