@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/gcaixeta/marginalia/internal/collection"
+	"github.com/gcaixeta/marginalia/internal/config"
+	"github.com/gcaixeta/marginalia/internal/editor"
 	"github.com/gcaixeta/marginalia/internal/slug"
 	"github.com/gcaixeta/marginalia/internal/snippet"
 	"github.com/gcaixeta/marginalia/internal/storage"
@@ -27,7 +27,7 @@ func editFile(title string) {
 	}
 
 	if len(files) == 1 {
-		openInEditor(files[0])
+		editor.OpenInEditor(files[0])
 		return
 	}
 
@@ -49,7 +49,7 @@ func editFile(title string) {
 		return
 	}
 
-	openInEditor(files[choice-1])
+	editor.OpenInEditor(files[choice-1])
 }
 
 func newFile(collection, title string) (string, error) {
@@ -159,34 +159,15 @@ func deleteFile(searchTerm string) {
 	fmt.Printf("✓ Arquivo excluído com sucesso: %s/%s\n", selectedFile.Collection, selectedFile.Name)
 }
 
-func removeCollection(collectionName string) {
-	// TODO: Implement collection removal functionality
-	fmt.Println("Funcionalidade de remoção de collection ainda não implementada.")
-	fmt.Printf("Collection: %s\n", collectionName)
-}
-
-func openInEditor(filePath string) {
-	// Create a command to run vim with the specified file
-	cmd := exec.Command("nvim", filePath)
-
-	// Attach the command's standard input, output, and error streams
-	// to the current process's standard streams. This allows the user
-	// to interact with Vim directly in the terminal.
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	fmt.Printf("Opening %s in NeoVim...\n", filePath)
-
-	// Run the command and wait for it to complete
-	if err := cmd.Run(); err != nil {
-		log.Fatalf("Error running NeoVim: %v\n", err)
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = config.Default()
+		config.Save(cfg)
 	}
 
-	fmt.Printf("Vim session for %s closed.\n", filePath)
-}
+	storage.Synchronize()
 
-func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: margi [action] [arguments]")
 		fmt.Println("Actions:")
@@ -196,7 +177,6 @@ func main() {
 		fmt.Println("  rm [search_term] - excluir nota existente (interface visual com confirmação)")
 		fmt.Println("  collections - listar todas as collections")
 		fmt.Println("  list [collection] - listar arquivos de uma collection")
-		fmt.Println("  remove [collection] - remover collection")
 		return
 	}
 
@@ -205,7 +185,7 @@ func main() {
 	switch action {
 	case "new":
 		var collectionName, title string
-		
+
 		if len(os.Args) == 3 {
 			// Only title provided, show collection picker
 			title = os.Args[2]
@@ -223,13 +203,13 @@ func main() {
 			fmt.Println("Usage: margi new [title] ou margi new [collection] [title]")
 			return
 		}
-		
+
 		filePath, err := newFile(collectionName, title)
 		if err != nil {
 			fmt.Println("Error creating new file:", err)
 			return
 		}
-		openInEditor(filePath)
+		editor.OpenInEditor(filePath)
 	case "edit":
 		if len(os.Args) < 3 {
 			fmt.Println("Usage: margi edit [search_term]")
@@ -251,13 +231,6 @@ func main() {
 		}
 		textType := os.Args[2]
 		listFiles(textType)
-	case "remove":
-		if len(os.Args) < 3 {
-			fmt.Println("Usage: margi remove [collection]")
-			return
-		}
-		collectionName := os.Args[2]
-		removeCollection(collectionName)
 	case "collections":
 		listCollections()
 	default:
