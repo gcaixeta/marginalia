@@ -14,7 +14,7 @@ import (
 	"github.com/gcaixeta/marginalia/internal/ui"
 )
 
-func editFile(title, editorCmd string) {
+func editFile(title, editorCmd string, sync *storage.GitSync) {
 	files, err := storage.FindFilePath(title)
 	if err != nil {
 		fmt.Printf("Error searching for files: %v\n", err)
@@ -28,6 +28,11 @@ func editFile(title, editorCmd string) {
 
 	if len(files) == 1 {
 		editor.OpenInEditor(files[0], editorCmd)
+		if sync != nil {
+			if err := sync.CommitAndPush("edit: " + title); err != nil {
+				fmt.Printf("Warning: git sync failed: %v\n", err)
+			}
+		}
 		return
 	}
 
@@ -50,6 +55,11 @@ func editFile(title, editorCmd string) {
 	}
 
 	editor.OpenInEditor(files[choice-1], editorCmd)
+	if sync != nil {
+		if err := sync.CommitAndPush("edit: " + title); err != nil {
+			fmt.Printf("Warning: git sync failed: %v\n", err)
+		}
+	}
 }
 
 func newFile(collection, title string) (string, error) {
@@ -123,8 +133,7 @@ func listCollections() {
 	}
 }
 
-func deleteFile(searchTerm string) {
-	// Run the visual delete picker with optional initial filter
+func deleteFile(searchTerm string, sync *storage.GitSync) {
 	selectedFile, err := ui.RunDeletePicker(searchTerm)
 	if err != nil {
 		fmt.Printf("Operação cancelada: %v\n", err)
@@ -136,7 +145,6 @@ func deleteFile(searchTerm string) {
 		return
 	}
 
-	// Show interactive confirmation dialog
 	dataDir, _ := storage.DataDir()
 	confirmed, err := ui.RunConfirmDialog(selectedFile.Path, dataDir)
 	if err != nil {
@@ -149,7 +157,6 @@ func deleteFile(searchTerm string) {
 		return
 	}
 
-	// Delete the file
 	err = os.Remove(selectedFile.Path)
 	if err != nil {
 		fmt.Printf("Erro ao excluir arquivo: %v\n", err)
@@ -157,6 +164,12 @@ func deleteFile(searchTerm string) {
 	}
 
 	fmt.Printf("✓ Arquivo excluído com sucesso: %s/%s\n", selectedFile.Collection, selectedFile.Name)
+
+	if sync != nil {
+		if err := sync.CommitAndPush("rm: " + selectedFile.Collection + "/" + selectedFile.Name); err != nil {
+			fmt.Printf("Warning: git sync failed: %v\n", err)
+		}
+	}
 }
 
 func main() {
@@ -168,7 +181,15 @@ func main() {
 
 	editorCmd := editor.ResolveEditor(cfg.Editor)
 
-	storage.Synchronize()
+	sync, err := storage.NewGitSync(&cfg.Backup)
+	if err != nil {
+		fmt.Printf("Warning: could not initialize git sync: %v\n", err)
+	}
+	if sync != nil {
+		if err := sync.Synchronize(); err != nil {
+			fmt.Printf("Warning: git sync failed: %v\n", err)
+		}
+	}
 
 	if len(os.Args) < 2 {
 		selected, err := ui.RunBrowsePicker()
@@ -176,6 +197,11 @@ func main() {
 			return
 		}
 		editor.OpenInEditor(selected.Path, editorCmd)
+		if sync != nil {
+			if err := sync.CommitAndPush("edit: " + selected.Collection + "/" + selected.Name); err != nil {
+				fmt.Printf("Warning: git sync failed: %v\n", err)
+			}
+		}
 		return
 	}
 
@@ -186,7 +212,6 @@ func main() {
 		var collectionName, title string
 
 		if len(os.Args) == 3 {
-			// Only title provided, show collection picker
 			title = os.Args[2]
 			selectedCollection, err := ui.RunPicker()
 			if err != nil {
@@ -195,7 +220,6 @@ func main() {
 			}
 			collectionName = selectedCollection
 		} else if len(os.Args) >= 4 {
-			// Collection and title provided
 			collectionName = os.Args[2]
 			title = os.Args[3]
 		} else {
@@ -209,20 +233,24 @@ func main() {
 			return
 		}
 		editor.OpenInEditor(filePath, editorCmd)
+		if sync != nil {
+			if err := sync.CommitAndPush("add: " + title); err != nil {
+				fmt.Printf("Warning: git sync failed: %v\n", err)
+			}
+		}
 	case "edit":
 		if len(os.Args) < 3 {
 			fmt.Println("Usage: margi edit [search_term]")
 			return
 		}
 		title := os.Args[2]
-		editFile(title, editorCmd)
+		editFile(title, editorCmd, sync)
 	case "rm":
-		// Search term is optional - if not provided, show all files
 		searchTerm := ""
 		if len(os.Args) >= 3 {
 			searchTerm = os.Args[2]
 		}
-		deleteFile(searchTerm)
+		deleteFile(searchTerm, sync)
 	case "list":
 		if len(os.Args) < 3 {
 			fmt.Println("Usage: margi list [collection]")

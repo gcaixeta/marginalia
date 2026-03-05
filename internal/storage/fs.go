@@ -30,6 +30,10 @@ func FindFilePath(fileName string) ([]string, error) {
 			return nil // returning nil allows walking to continue in other branches
 		}
 
+		if d.IsDir() && strings.HasPrefix(d.Name(), ".") {
+			return fs.SkipDir
+		}
+
 		// Check if the current entry is a regular file and its name contains the search term (case-insensitive)
 		if !d.IsDir() && strings.Contains(strings.ToLower(d.Name()), strings.ToLower(fileName)) {
 			foundFiles = append(foundFiles, path)
@@ -76,6 +80,10 @@ func ListAllFiles() ([]FileItem, error) {
 	err = filepath.WalkDir(dataDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // Skip entries with errors
+		}
+
+		if d.IsDir() && strings.HasPrefix(d.Name(), ".") {
+			return fs.SkipDir
 		}
 
 		// Only process regular files (not directories)
