@@ -7,6 +7,26 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+func Default() *Config {
+	return &Config{}
+}
+
+func Save(cfg *Config) error {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(configDir, "marginalia")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	data, err := toml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "config.toml"), data, 0644)
+}
+
 func Load() (*Config, error) {
 	configPath, err := os.UserConfigDir()
 	if err != nil {

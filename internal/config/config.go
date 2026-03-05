@@ -1,6 +1,7 @@
 package config
 
 type Config struct {
+	Editor string
 	Backup BackupConfig
 }
 

@@ -1,29 +1,31 @@
 package editor
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/exec"
 )
 
-func OpenInEditor(filePath string) {
-	// Create a command to run vim with the specified file
-	cmd := exec.Command("nvim", filePath)
+// ResolveEditor returns the editor to use: config value → $VISUAL → $EDITOR → "vi"
+func ResolveEditor(configured string) string {
+	if configured != "" {
+		return configured
+	}
+	if v := os.Getenv("VISUAL"); v != "" {
+		return v
+	}
+	if v := os.Getenv("EDITOR"); v != "" {
+		return v
+	}
+	return "vi"
+}
 
-	// Attach the command's standard input, output, and error streams
-	// to the current process's standard streams. This allows the user
-	// to interact with Vim directly in the terminal.
+func OpenInEditor(filePath, editorCmd string) {
+	cmd := exec.Command(editorCmd, filePath)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
-	fmt.Printf("Opening %s in NeoVim...\n", filePath)
-
-	// Run the command and wait for it to complete
 	if err := cmd.Run(); err != nil {
-		log.Fatalf("Error running NeoVim: %v\n", err)
+		log.Fatalf("Error running %s: %v\n", editorCmd, err)
 	}
-
-	fmt.Printf("Vim session for %s closed.\n", filePath)
 }

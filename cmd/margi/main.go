@@ -14,7 +14,7 @@ import (
 	"github.com/gcaixeta/marginalia/internal/ui"
 )
 
-func editFile(title string) {
+func editFile(title, editorCmd string) {
 	files, err := storage.FindFilePath(title)
 	if err != nil {
 		fmt.Printf("Error searching for files: %v\n", err)
@@ -27,7 +27,7 @@ func editFile(title string) {
 	}
 
 	if len(files) == 1 {
-		editor.OpenInEditor(files[0])
+		editor.OpenInEditor(files[0], editorCmd)
 		return
 	}
 
@@ -49,7 +49,7 @@ func editFile(title string) {
 		return
 	}
 
-	editor.OpenInEditor(files[choice-1])
+	editor.OpenInEditor(files[choice-1], editorCmd)
 }
 
 func newFile(collection, title string) (string, error) {
@@ -166,17 +166,16 @@ func main() {
 		config.Save(cfg)
 	}
 
+	editorCmd := editor.ResolveEditor(cfg.Editor)
+
 	storage.Synchronize()
 
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: margi [action] [arguments]")
-		fmt.Println("Actions:")
-		fmt.Println("  new [title] - criar nova nota (mostra seletor de collection)")
-		fmt.Println("  new [collection] [title] - criar nova nota em collection específica")
-		fmt.Println("  edit [search_term] - editar nota existente")
-		fmt.Println("  rm [search_term] - excluir nota existente (interface visual com confirmação)")
-		fmt.Println("  collections - listar todas as collections")
-		fmt.Println("  list [collection] - listar arquivos de uma collection")
+		selected, err := ui.RunBrowsePicker()
+		if err != nil || selected == nil {
+			return
+		}
+		editor.OpenInEditor(selected.Path, editorCmd)
 		return
 	}
 
@@ -209,14 +208,14 @@ func main() {
 			fmt.Println("Error creating new file:", err)
 			return
 		}
-		editor.OpenInEditor(filePath)
+		editor.OpenInEditor(filePath, editorCmd)
 	case "edit":
 		if len(os.Args) < 3 {
 			fmt.Println("Usage: margi edit [search_term]")
 			return
 		}
 		title := os.Args[2]
-		editFile(title)
+		editFile(title, editorCmd)
 	case "rm":
 		// Search term is optional - if not provided, show all files
 		searchTerm := ""

@@ -45,3 +45,5 @@ go test ./internal/collection/...  # Run a single package's tests
 **Current known issue:** `config.Default()` and `config.Save()` are called in `main.go` but not yet defined in `internal/config/loader.go`. The package only defines `Load()`.
 
 **UI pattern:** All TUI components follow the Bubbletea Model-View-Update pattern. Each component has a `RunXxx()` function that creates a `tea.Program`, runs it, and returns the result.
+
+**Tests:** Always write tests for new code. Follow the pattern in `internal/ui/picker_test.go`: direct state assertions using `tea.KeyMsg` for input, one `Test*` function per behavior.
