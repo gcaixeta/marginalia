@@ -151,8 +151,7 @@ func (m ConfirmModel) View() string {
 func RunConfirmDialog(filePath string, dataDir string) (bool, error) {
 	model := NewConfirmModel(filePath, dataDir)
 
-	p := tea.NewProgram(model)
-	finalModel, err := p.Run()
+	finalModel, err := runProgram(model)
 	if err != nil {
 		return false, err
 	}

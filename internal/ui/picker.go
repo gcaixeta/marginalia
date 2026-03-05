@@ -10,6 +10,11 @@ import (
 	"github.com/gcaixeta/marginalia/internal/slug"
 )
 
+// runProgram runs a Bubbletea program with the standard options for this app.
+func runProgram(model tea.Model) (tea.Model, error) {
+	return tea.NewProgram(model, tea.WithAltScreen()).Run()
+}
+
 // Styles for the picker UI
 var (
 	titleStyle = lipgloss.NewStyle().
@@ -307,8 +312,7 @@ func RunPicker() (string, error) {
 		return "", err
 	}
 
-	p := tea.NewProgram(model)
-	finalModel, err := p.Run()
+	finalModel, err := runProgram(model)
 	if err != nil {
 		return "", err
 	}

@@ -249,8 +249,7 @@ func RunBrowsePicker() (*storage.FileItem, error) {
 		return nil, err
 	}
 
-	p := tea.NewProgram(model)
-	finalModel, err := p.Run()
+	finalModel, err := runProgram(model)
 	if err != nil {
 		return nil, err
 	}
