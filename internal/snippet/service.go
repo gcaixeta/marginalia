@@ -16,7 +16,7 @@ func Default(title, collection string) string {
 ## Created: %s
 ## Collection: %s
 
-`, title, time.Now().Format(time.RFC3339), collection)
+`, title, time.Now().Format("2/1/2006 15:04:05"), collection)
 }
 
 func ReadSnippet(title, collection string) (string, error) {
@@ -44,7 +44,7 @@ func ReadSnippet(title, collection string) (string, error) {
 	}{
 		Title:      title,
 		Collection: collection,
-		Date:       time.Now().Format(time.RFC3339),
+		Date:       time.Now().Format("2/1/2006 15:04:05"),
 	}
 
 	var buf bytes.Buffer

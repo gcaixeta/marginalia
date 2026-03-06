@@ -50,15 +50,16 @@ var (
 
 // PickerModel holds the state of the collection picker
 type PickerModel struct {
-	collections      []collection.Collection
-	filteredItems    []pickerItem
-	input            string
-	cursor           int
-	selected         string
-	cancelled        bool
-	err              error
-	width            int
-	height           int
+	collections   []collection.Collection
+	filteredItems []pickerItem
+	input         string
+	cursor        int
+	selected      string
+	cancelled     bool
+	err           error
+	filterMode    bool
+	width         int
+	height        int
 }
 
 type pickerItem struct {
@@ -104,64 +105,93 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc":
-			m.cancelled = true
-			return m, tea.Quit
-
-		case "enter":
-			if len(m.filteredItems) > 0 {
-				selectedItem := m.filteredItems[m.cursor]
-				
-				if selectedItem.isNewItem {
-					// Normalize the collection name
-					normalizedName := slug.MakeSlug(m.input)
-					if normalizedName == "" {
-						m.err = fmt.Errorf("nome de collection inválido")
-						return m, nil
-					}
-					
-					// Create the new collection
-					err := collection.CreateCollection(normalizedName)
-					if err != nil {
-						m.err = err
-						return m, nil
-					}
-					m.selected = normalizedName
-				} else {
-					m.selected = selectedItem.name
-				}
+		if m.filterMode {
+			switch msg.String() {
+			case "ctrl+c":
+				m.cancelled = true
 				return m, tea.Quit
-			}
-			return m, nil
 
-		case "up", "k":
-			if m.cursor > 0 {
-				m.cursor--
-			}
+			case "esc":
+				m.filterMode = false
 
-		case "down", "j":
-			if m.cursor < len(m.filteredItems)-1 {
-				m.cursor++
-			}
+			case "enter":
+				if len(m.filteredItems) > 0 {
+					selectedItem := m.filteredItems[m.cursor]
+					if selectedItem.isNewItem {
+						normalizedName := slug.MakeSlug(m.input)
+						if normalizedName == "" {
+							m.err = fmt.Errorf("nome de collection inválido")
+							return m, nil
+						}
+						err := collection.CreateCollection(normalizedName)
+						if err != nil {
+							m.err = err
+							return m, nil
+						}
+						m.selected = normalizedName
+					} else {
+						m.selected = selectedItem.name
+					}
+					return m, tea.Quit
+				}
+				return m, nil
 
-		case "backspace":
-			if len(m.input) > 0 {
-				m.input = m.input[:len(m.input)-1]
-				m.updateFilteredItems()
-				// Reset cursor if it's out of bounds
-				if m.cursor >= len(m.filteredItems) {
+			case "backspace":
+				if len(m.input) > 0 {
+					m.input = m.input[:len(m.input)-1]
+					m.updateFilteredItems()
+					if m.cursor >= len(m.filteredItems) {
+						m.cursor = 0
+					}
+				}
+
+			default:
+				if len(msg.String()) == 1 {
+					m.input += msg.String()
+					m.updateFilteredItems()
 					m.cursor = 0
 				}
 			}
+		} else {
+			switch msg.String() {
+			case "ctrl+c", "esc":
+				m.cancelled = true
+				return m, tea.Quit
 
-		default:
-			// Handle regular character input
-			if len(msg.String()) == 1 {
-				m.input += msg.String()
-				m.updateFilteredItems()
-				// Reset cursor to top when filtering
-				m.cursor = 0
+			case "enter":
+				if len(m.filteredItems) > 0 {
+					selectedItem := m.filteredItems[m.cursor]
+					if selectedItem.isNewItem {
+						normalizedName := slug.MakeSlug(m.input)
+						if normalizedName == "" {
+							m.err = fmt.Errorf("nome de collection inválido")
+							return m, nil
+						}
+						err := collection.CreateCollection(normalizedName)
+						if err != nil {
+							m.err = err
+							return m, nil
+						}
+						m.selected = normalizedName
+					} else {
+						m.selected = selectedItem.name
+					}
+					return m, tea.Quit
+				}
+				return m, nil
+
+			case "up", "k":
+				if m.cursor > 0 {
+					m.cursor--
+				}
+
+			case "down", "j":
+				if m.cursor < len(m.filteredItems)-1 {
+					m.cursor++
+				}
+
+			case "/":
+				m.filterMode = true
 			}
 		}
 	}
@@ -184,7 +214,9 @@ func (m PickerModel) View() string {
 	// Input field
 	b.WriteString("Buscar: ")
 	b.WriteString(inputStyle.Render(m.input))
-	b.WriteString(inputStyle.Render("█"))
+	if m.filterMode {
+		b.WriteString(inputStyle.Render("█"))
+	}
 	b.WriteString("\n\n")
 
 	// Show error if any
@@ -252,9 +284,17 @@ func (m PickerModel) View() string {
 		}
 	}
 
-	// Help text
+	// Statusline
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("[↑↓/jk] navegar • [Enter] selecionar • [Esc] cancelar"))
+	var statusline string
+	if m.filterMode {
+		statusline = modeFilterStyle.Render("-- FILTER --") +
+			helpStyle.Render("  [Esc] normal • [Enter] selecionar")
+	} else {
+		statusline = modeNormalStyle.Render("-- NORMAL --") +
+			helpStyle.Render("  [↑↓/jk] navegar • [/] filtrar • [Enter] selecionar • [Esc] cancelar")
+	}
+	b.WriteString(statusline)
 
 	return b.String()
 }
