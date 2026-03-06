@@ -260,6 +260,19 @@ func main() {
 		listFiles(textType)
 	case "collections":
 		listCollections()
+	case "sync":
+		if sync == nil {
+			fmt.Println("no backup configured")
+			return
+		}
+		if err := sync.Synchronize(); err != nil {
+			fmt.Fprintf(os.Stderr, "sync error: %v\n", err)
+			os.Exit(1)
+		}
+		if err := sync.CommitAndPush("sync"); err != nil {
+			fmt.Fprintf(os.Stderr, "sync error: %v\n", err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Printf("Unknown action: %s\n", action)
 	}
