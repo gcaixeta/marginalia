@@ -2,17 +2,19 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 
+	"github.com/gcaixeta/marginalia/internal/collection"
+	"github.com/gcaixeta/marginalia/internal/config"
+	"github.com/gcaixeta/marginalia/internal/editor"
 	"github.com/gcaixeta/marginalia/internal/slug"
 	"github.com/gcaixeta/marginalia/internal/snippet"
 	"github.com/gcaixeta/marginalia/internal/storage"
+	"github.com/gcaixeta/marginalia/internal/ui"
 )
 
-func editFile(title string) {
+func editFile(title, editorCmd string, sync *storage.GitSync) {
 	files, err := storage.FindFilePath(title)
 	if err != nil {
 		fmt.Printf("Error searching for files: %v\n", err)
@@ -25,7 +27,12 @@ func editFile(title string) {
 	}
 
 	if len(files) == 1 {
-		openInEditor(files[0])
+		editor.OpenInEditor(files[0], editorCmd)
+		if sync != nil {
+			if err := sync.CommitAndPush("edit: " + title); err != nil {
+				fmt.Printf("Warning: git sync failed: %v\n", err)
+			}
+		}
 		return
 	}
 
@@ -47,7 +54,12 @@ func editFile(title string) {
 		return
 	}
 
-	openInEditor(files[choice-1])
+	editor.OpenInEditor(files[choice-1], editorCmd)
+	if sync != nil {
+		if err := sync.CommitAndPush("edit: " + title); err != nil {
+			fmt.Printf("Warning: git sync failed: %v\n", err)
+		}
+	}
 }
 
 func newFile(collection, title string) (string, error) {
@@ -97,39 +109,99 @@ func listFiles(textGenre string) {
 	fmt.Println("list files of type", textGenre)
 }
 
-func removeFile(textGenre string) {
-	fmt.Println("remove file of type", textGenre)
-}
-
-func openInEditor(filePath string) {
-	// Create a command to run vim with the specified file
-	cmd := exec.Command("nvim", filePath)
-
-	// Attach the command's standard input, output, and error streams
-	// to the current process's standard streams. This allows the user
-	// to interact with Vim directly in the terminal.
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	fmt.Printf("Opening %s in NeoVim...\n", filePath)
-
-	// Run the command and wait for it to complete
-	if err := cmd.Run(); err != nil {
-		log.Fatalf("Error running NeoVim: %v\n", err)
+func listCollections() {
+	collections, err := collection.ListCollections()
+	if err != nil {
+		fmt.Printf("Error listing collections: %v\n", err)
+		return
 	}
 
-	fmt.Printf("Vim session for %s closed.\n", filePath)
+	if len(collections) == 0 {
+		fmt.Println("Nenhuma collection encontrada.")
+		fmt.Println("Crie uma nova collection com: margi new [título]")
+		return
+	}
+
+	fmt.Println("Collections disponíveis:")
+	fmt.Println()
+	for _, c := range collections {
+		plural := ""
+		if c.FileCount != 1 {
+			plural = "s"
+		}
+		fmt.Printf("  • %s (%d nota%s)\n", c.Name, c.FileCount, plural)
+	}
+}
+
+func deleteFile(searchTerm string, sync *storage.GitSync) {
+	selectedFile, err := ui.RunDeletePicker(searchTerm)
+	if err != nil {
+		fmt.Printf("Operação cancelada: %v\n", err)
+		return
+	}
+
+	if selectedFile == nil {
+		fmt.Println("Nenhum arquivo selecionado.")
+		return
+	}
+
+	dataDir, _ := storage.DataDir()
+	confirmed, err := ui.RunConfirmDialog(selectedFile.Path, dataDir)
+	if err != nil {
+		fmt.Printf("Erro ao mostrar diálogo de confirmação: %v\n", err)
+		return
+	}
+
+	if !confirmed {
+		fmt.Println("Exclusão cancelada.")
+		return
+	}
+
+	err = os.Remove(selectedFile.Path)
+	if err != nil {
+		fmt.Printf("Erro ao excluir arquivo: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✓ Arquivo excluído com sucesso: %s/%s\n", selectedFile.Collection, selectedFile.Name)
+
+	if sync != nil {
+		if err := sync.CommitAndPush("rm: " + selectedFile.Collection + "/" + selectedFile.Name); err != nil {
+			fmt.Printf("Warning: git sync failed: %v\n", err)
+		}
+	}
 }
 
 func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = config.Default()
+		config.Save(cfg)
+	}
+
+	editorCmd := editor.ResolveEditor(cfg.Editor)
+
+	sync, err := storage.NewGitSync(&cfg.Backup)
+	if err != nil {
+		fmt.Printf("Warning: could not initialize git sync: %v\n", err)
+	}
+	if sync != nil {
+		if err := sync.Synchronize(); err != nil {
+			fmt.Printf("Warning: git sync failed: %v\n", err)
+		}
+	}
+
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: margi [action] [arguments]")
-		fmt.Println("Actions:")
-		fmt.Println("  new [collection] [title]")
-		fmt.Println("  edit [search_term]")
-		fmt.Println("  list [collection]")
-		fmt.Println("  remove [collection]")
+		selected, err := ui.RunBrowsePicker()
+		if err != nil || selected == nil {
+			return
+		}
+		editor.OpenInEditor(selected.Path, editorCmd)
+		if sync != nil {
+			if err := sync.CommitAndPush("edit: " + selected.Collection + "/" + selected.Name); err != nil {
+				fmt.Printf("Warning: git sync failed: %v\n", err)
+			}
+		}
 		return
 	}
 
@@ -137,25 +209,48 @@ func main() {
 
 	switch action {
 	case "new":
-		if len(os.Args) < 4 {
-			fmt.Println("Usage: margi new [collection] [title]")
+		var collectionName, title string
+
+		if len(os.Args) == 3 {
+			title = os.Args[2]
+			selectedCollection, err := ui.RunPicker()
+			if err != nil {
+				fmt.Printf("Operação cancelada: %v\n", err)
+				return
+			}
+			collectionName = selectedCollection
+		} else if len(os.Args) >= 4 {
+			collectionName = os.Args[2]
+			title = os.Args[3]
+		} else {
+			fmt.Println("Usage: margi new [title] ou margi new [collection] [title]")
 			return
 		}
-		textType := os.Args[2]
-		title := os.Args[3]
-		filePath, err := newFile(textType, title)
+
+		filePath, err := newFile(collectionName, title)
 		if err != nil {
 			fmt.Println("Error creating new file:", err)
 			return
 		}
-		openInEditor(filePath)
+		editor.OpenInEditor(filePath, editorCmd)
+		if sync != nil {
+			if err := sync.CommitAndPush("add: " + title); err != nil {
+				fmt.Printf("Warning: git sync failed: %v\n", err)
+			}
+		}
 	case "edit":
 		if len(os.Args) < 3 {
 			fmt.Println("Usage: margi edit [search_term]")
 			return
 		}
 		title := os.Args[2]
-		editFile(title)
+		editFile(title, editorCmd, sync)
+	case "rm":
+		searchTerm := ""
+		if len(os.Args) >= 3 {
+			searchTerm = os.Args[2]
+		}
+		deleteFile(searchTerm, sync)
 	case "list":
 		if len(os.Args) < 3 {
 			fmt.Println("Usage: margi list [collection]")
@@ -163,13 +258,8 @@ func main() {
 		}
 		textType := os.Args[2]
 		listFiles(textType)
-	case "remove":
-		if len(os.Args) < 3 {
-			fmt.Println("Usage: margi remove [collection]")
-			return
-		}
-		textType := os.Args[2]
-		removeFile(textType)
+	case "collections":
+		listCollections()
 	default:
 		fmt.Printf("Unknown action: %s\n", action)
 	}
