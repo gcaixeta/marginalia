@@ -260,6 +260,17 @@ func main() {
 		listFiles(textType)
 	case "collections":
 		listCollections()
+	case "sync":
+		if sync == nil {
+			fmt.Println("Git sync is not configured. Set backup.provider = \"git\" in your config.")
+			return
+		}
+		if err := sync.Synchronize(); err != nil {
+			fmt.Printf("Warning: git sync failed: %v\n", err)
+		}
+		if err := sync.CommitAndPush("sync"); err != nil {
+			fmt.Printf("Warning: git sync failed: %v\n", err)
+		}
 	default:
 		fmt.Printf("Unknown action: %s\n", action)
 	}
