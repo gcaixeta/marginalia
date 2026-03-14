@@ -2,6 +2,8 @@
 
 A CLI tool for managing plain-text Markdown notes organized into collections.
 
+![Demo](margi.gif)
+
 ## Features
 
 - Organize notes into named collections
