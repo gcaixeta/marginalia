@@ -266,6 +266,42 @@ func main() {
 			if len(os.Args) >= 3 {
 				searchTerm = os.Args[2]
 			}
+		}
+	case "edit":
+		if len(os.Args) < 3 {
+			fmt.Println("Usage: margi edit [search_term]")
+			return
+		}
+		title := os.Args[2]
+		editFile(title, editorCmd, sync)
+	case "rm":
+		searchTerm := ""
+		if len(os.Args) >= 3 {
+			searchTerm = os.Args[2]
+		}
+		deleteFile(searchTerm, sync)
+	case "list":
+		if len(os.Args) < 3 {
+			fmt.Println("Usage: margi list [collection]")
+			return
+		}
+		textType := os.Args[2]
+		listFiles(textType)
+	case "collections":
+		listCollections()
+	case "sync":
+		if sync == nil {
+			fmt.Println("Git sync is not configured. Set backup.provider = \"git\" in your config.")
+			return
+		}
+		if err := sync.Synchronize(); err != nil {
+			fmt.Printf("Warning: git sync failed: %v\n", err)
+		}
+		if err := sync.CommitAndPush("sync"); err != nil {
+			fmt.Printf("Warning: git sync failed: %v\n", err)
+		}
+	default:
+		fmt.Printf("Unknown action: %s\n", action)
 			deleteFile(searchTerm, sync)
 		},
 		"list": func() {
