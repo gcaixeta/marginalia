@@ -179,38 +179,84 @@ func (m BrowsePickerModel) View() string {
 	} else {
 		b.WriteString("\n")
 
-		currentCollection := ""
-		visibleIndex := 0
+		type flatItem struct {
+			isHeader bool
+			label    string
+			fileIdx  int
+		}
+
+		// Phase 1: build flat list
+		var flatList []flatItem
+		cursorFlatIdx := 0
+		currentColl := ""
 
 		for i, file := range m.filteredFiles {
-			if file.Collection != currentCollection {
-				currentCollection = file.Collection
-				b.WriteString("\n")
-				b.WriteString(collectionHeaderStyle.Render(fmt.Sprintf("📁 %s", currentCollection)))
-				b.WriteString("\n")
+			if file.Collection != currentColl {
+				currentColl = file.Collection
+				flatList = append(flatList, flatItem{fileIdx: -1, label: ""}) // blank spacer
+				flatList = append(flatList, flatItem{isHeader: true, label: currentColl, fileIdx: -1})
 			}
-
-			if visibleIndex >= maxVisible {
-				remaining := len(m.filteredFiles) - i
-				b.WriteString("\n")
-				b.WriteString(helpStyle.Render(fmt.Sprintf("... and %d more note(s)", remaining)))
-				break
+			if i == m.cursor {
+				cursorFlatIdx = len(flatList)
 			}
-
+			dateStr := formatDate(file.ModTime)
 			cursor := "  "
 			style := browseNormalStyle
-
 			if i == m.cursor {
 				cursor = "▸ "
 				style = browseSelectedStyle
 			}
+			line := style.Render(fmt.Sprintf("%s%s %s", cursor, file.Name, fileDateStyle.Render(fmt.Sprintf("(%s)", dateStr))))
+			flatList = append(flatList, flatItem{fileIdx: i, label: line})
+		}
 
-			dateStr := formatDate(file.ModTime)
-			line := fmt.Sprintf("%s%s %s", cursor, file.Name, fileDateStyle.Render(fmt.Sprintf("(%s)", dateStr)))
-			b.WriteString(style.Render(line))
+		// Phase 2: viewport over flatList using cursorFlatIdx
+		start := 0
+		end := len(flatList)
+		if len(flatList) > maxVisible {
+			if cursorFlatIdx >= maxVisible-2 {
+				start = cursorFlatIdx - maxVisible + 3
+				end = cursorFlatIdx + 3
+				if end > len(flatList) {
+					end = len(flatList)
+					start = end - maxVisible
+					if start < 0 {
+						start = 0
+					}
+				}
+			} else {
+				end = maxVisible
+			}
+		}
+
+		// Phase 3: render
+		for i := start; i < end; i++ {
+			item := flatList[i]
+			switch {
+			case item.fileIdx == -1 && !item.isHeader:
+				b.WriteString("\n")
+			case item.isHeader:
+				b.WriteString(collectionHeaderStyle.Render(fmt.Sprintf("📁 %s", item.label)))
+				b.WriteString("\n")
+			default:
+				b.WriteString(item.label)
+				b.WriteString("\n")
+			}
+		}
+
+		// Scroll indicator
+		if len(flatList) > maxVisible {
+			firstFile, lastFile := -1, -1
+			for i := start; i < end; i++ {
+				if flatList[i].fileIdx >= 0 {
+					if firstFile == -1 {
+						firstFile = flatList[i].fileIdx + 1
+					}
+					lastFile = flatList[i].fileIdx + 1
+				}
+			}
 			b.WriteString("\n")
-
-			visibleIndex++
+			b.WriteString(helpStyle.Render(fmt.Sprintf("notas %d–%d de %d", firstFile, lastFile, len(m.filteredFiles))))
 		}
 	}
 

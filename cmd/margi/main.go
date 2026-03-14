@@ -85,7 +85,7 @@ func newFile(collection, title string) (string, error) {
 
 	if err != nil {
 		if os.IsExist(err) {
-			return "", fmt.Errorf("A file with this name existis in collection %s!", collection)
+			return "", fmt.Errorf("A file with this name exists in collection %s!", collection)
 		}
 
 		return "", err
