@@ -85,7 +85,7 @@ func newFile(collection, title string) (string, error) {
 
 	if err != nil {
 		if os.IsExist(err) {
-			return "", fmt.Errorf("A file with this name existis in collection %s!", collection)
+			return "", fmt.Errorf("A file with this name exists in collection %s!", collection)
 		}
 
 		return "", err
@@ -172,6 +172,53 @@ func deleteFile(searchTerm string, sync *storage.GitSync) {
 	}
 }
 
+func runNew(editorCmd string, sync *storage.GitSync) {
+	var collectionName, title string
+
+	if len(os.Args) == 3 {
+		title = os.Args[2]
+		selectedCollection, err := ui.RunPicker()
+		if err != nil {
+			fmt.Printf("Operação cancelada: %v\n", err)
+			return
+		}
+		collectionName = selectedCollection
+	} else if len(os.Args) >= 4 {
+		collectionName = os.Args[2]
+		title = os.Args[3]
+	} else {
+		fmt.Fprintln(os.Stderr, "Usage: margi new [title] ou margi new [collection] [title]")
+		return
+	}
+
+	filePath, err := newFile(collectionName, title)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating new file: %v\n", err)
+		return
+	}
+	editor.OpenInEditor(filePath, editorCmd)
+	if sync != nil {
+		if err := sync.CommitAndPush("add: " + title); err != nil {
+			fmt.Printf("Warning: git sync failed: %v\n", err)
+		}
+	}
+}
+
+func runSync(sync *storage.GitSync) {
+	if sync == nil {
+		fmt.Fprintln(os.Stderr, "no backup configured")
+		return
+	}
+	if err := sync.Synchronize(); err != nil {
+		fmt.Fprintf(os.Stderr, "sync error: %v\n", err)
+		os.Exit(1)
+	}
+	if err := sync.CommitAndPush("sync"); err != nil {
+		fmt.Fprintf(os.Stderr, "sync error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -205,37 +252,19 @@ func main() {
 		return
 	}
 
-	action := os.Args[1]
-
-	switch action {
-	case "new":
-		var collectionName, title string
-
-		if len(os.Args) == 3 {
-			title = os.Args[2]
-			selectedCollection, err := ui.RunPicker()
-			if err != nil {
-				fmt.Printf("Operação cancelada: %v\n", err)
+	cmds := map[string]func(){
+		"new": func() { runNew(editorCmd, sync) },
+		"edit": func() {
+			if len(os.Args) < 3 {
+				fmt.Fprintln(os.Stderr, "Usage: margi edit [search_term]")
 				return
 			}
-			collectionName = selectedCollection
-		} else if len(os.Args) >= 4 {
-			collectionName = os.Args[2]
-			title = os.Args[3]
-		} else {
-			fmt.Println("Usage: margi new [title] ou margi new [collection] [title]")
-			return
-		}
-
-		filePath, err := newFile(collectionName, title)
-		if err != nil {
-			fmt.Println("Error creating new file:", err)
-			return
-		}
-		editor.OpenInEditor(filePath, editorCmd)
-		if sync != nil {
-			if err := sync.CommitAndPush("add: " + title); err != nil {
-				fmt.Printf("Warning: git sync failed: %v\n", err)
+			editFile(os.Args[2], editorCmd, sync)
+		},
+		"rm": func() {
+			searchTerm := ""
+			if len(os.Args) >= 3 {
+				searchTerm = os.Args[2]
 			}
 		}
 	case "edit":
@@ -273,5 +302,23 @@ func main() {
 		}
 	default:
 		fmt.Printf("Unknown action: %s\n", action)
+			deleteFile(searchTerm, sync)
+		},
+		"list": func() {
+			if len(os.Args) < 3 {
+				fmt.Fprintln(os.Stderr, "Usage: margi list [collection]")
+				return
+			}
+			listFiles(os.Args[2])
+		},
+		"collections": listCollections,
+		"sync":        func() { runSync(sync) },
 	}
+
+	fn, ok := cmds[os.Args[1]]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "Unknown action: %s\n", os.Args[1])
+		os.Exit(1)
+	}
+	fn()
 }
